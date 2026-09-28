@@ -1,13 +1,30 @@
 name: Publish
 
 on:
-  release:
-    types: [ released, prereleased ]
+  push:
+    tags:
+      - 'gradle-*'
+      - 'idea-*'
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target to publish'
+        required: true
+        type: choice
+        default: 'all'
+        options:
+          - 'all'
+          - 'gradle-plugin'
+          - 'idea-plugin'
 
 jobs:
   publish-gradle-plugin:
     name: Publish Gradle Plugin to MavenCentral
-    runs-on: macOS-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'gradle-plugin')) ||
+      (github.event_name == 'push' && (startsWith(github.ref_name, 'gradle-') || (!startsWith(github.ref_name, 'idea-'))))
+    runs-on: ubuntu-latest
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -29,7 +46,10 @@ jobs:
 
   publish-idea-plugin:
     name: Publish IDEA Plugin to Marketplace
-    runs-on: macOS-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'idea-plugin')) ||
+      (github.event_name == 'push' && (startsWith(github.ref_name, 'idea-') || (!startsWith(github.ref_name, 'gradle-'))))
+    runs-on: ubuntu-latest
     steps:
       - name: Check out code
         uses: actions/checkout@v4
