@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_title">Staging Title Override</string>
+    <string name="override">I am override - staging</string>
+</resources>

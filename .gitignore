@@ -1,0 +1,53 @@
+# Gradle
+.gradle/
+**/.gradle/
+**/.intellijPlatform/
+build/
+**/build/
+!src/**/build/
+
+# Kotlin / Multiplatform / JS
+.kotlin/
+**/.kotlin/
+kotlin-js-store/
+node_modules/
+
+# Android
+local.properties
+.cxx/
+.externalNativeBuild/
+captures/
+*.apk
+*.aab
+
+# IntelliJ IDEA / IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Xcode / Apple
+xcuserdata/
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+**/xcshareddata/WorkspaceSettings.xcsettings
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs & Diagnostic Dumps
+*.log
+hs_err_pid*
+replay_pid*
+*.hprof

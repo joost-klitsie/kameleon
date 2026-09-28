@@ -1,0 +1,39 @@
+<idea-plugin>
+    <id>dev.klitsie.kameleon.switcher</id>
+    <name>Kameleon Variant Switcher</name>
+    <vendor>Joost Klitsie</vendor>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.gradle</depends>
+    <depends optional="true" config-file="kameleon-android.xml">org.jetbrains.android</depends>
+
+    <applicationListeners>
+        <listener class="dev.klitsie.kameleon.idea.KameleonExecutionListener"
+                  topic="com.intellij.execution.ExecutionListener" />
+    </applicationListeners>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity implementation="dev.klitsie.kameleon.idea.KameleonStartupActivity" />
+    </extensions>
+
+    <extensions defaultExtensionNs="org.jetbrains.plugins.gradle">
+        <modelBuilderService implementation="dev.klitsie.kameleon.idea.KameleonModelBuilderService" />
+        <projectResolve implementation="dev.klitsie.kameleon.idea.KameleonProjectResolverExtension" />
+    </extensions>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup
+                id="Kameleon Notifications"
+                displayType="BALLOON"
+                isLogByDefault="true" />
+    </extensions>
+
+    <actions>
+        <action id="dev.klitsie.kameleon.idea.KameleonVariantAction"
+                class="dev.klitsie.kameleon.idea.KameleonVariantAction"
+                text="Switch Variant"
+                description="Select active Kameleon variant">
+            <add-to-group group-id="MainToolbarRight" anchor="before" relative-to-action="RunToolbarTopLevelExecutorActionGroup" />
+        </action>
+    </actions>
+</idea-plugin>

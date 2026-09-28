@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_title">Título Base</string>
+    <string name="greeting">Hola Base</string>
+</resources>

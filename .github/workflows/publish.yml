@@ -1,0 +1,49 @@
+name: Publish
+
+on:
+  release:
+    types: [ released, prereleased ]
+
+jobs:
+  publish-gradle-plugin:
+    name: Publish Gradle Plugin to MavenCentral
+    runs-on: macOS-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: 21
+
+      - name: Publish to MavenCentral
+        run: ./gradlew :kameleon-gradle-plugin:publishToMavenCentral --no-configuration-cache
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_KEY_CONTENTS }}
+
+  publish-idea-plugin:
+    name: Publish IDEA Plugin to Marketplace
+    runs-on: macOS-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: 21
+
+      - name: Publish to JetBrains Marketplace
+        run: ./gradlew :kameleon-idea-plugin:publishPlugin --no-configuration-cache
+        env:
+          INTELLIJ_PLATFORM_PUBLISH_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+          CERTIFICATE_CHAIN: ${{ secrets.INTELLIJ_CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.INTELLIJ_PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.INTELLIJ_SIGN_PASSWORD }}
