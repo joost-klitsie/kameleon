@@ -17,10 +17,6 @@ class AndroidProjectTarget(
     private val project: Project,
     private val extension: KameleonExtension
 ) : TargetAdapter {
-    constructor(project: Project) : this(
-        project,
-        project.extensions.getByType(KameleonExtension::class.java)
-    )
 
     override fun configure() {
         project.plugins.withId("com.android.application") {
@@ -40,7 +36,7 @@ class AndroidProjectTarget(
         androidComponents.finalizeDsl {
             val agpProductFlavors = androidDsl.productFlavors
             val agpHasFlavors = agpProductFlavors.isNotEmpty()
-            val kameleonFlavors = extension.dimensions.flatMap { it.flavors }
+            val kameleonFlavors = extension.getOrderedDimensions().flatMap { it.getOrderedFlavors() }
 
             if (agpHasFlavors) {
                 val agpFlavorNames = agpProductFlavors.map { it.name }.toSet()
@@ -79,11 +75,11 @@ class AndroidProjectTarget(
                     }
                 }
             } else if (kameleonFlavors.isNotEmpty()) {
-                extension.dimensions.forEach { dim ->
+                extension.getOrderedDimensions().forEach { dim ->
                     if (!androidDsl.flavorDimensions.contains(dim.name)) {
                         androidDsl.flavorDimensions.add(dim.name)
                     }
-                    dim.flavors.forEach { flavor ->
+                    dim.getOrderedFlavors().forEach { flavor ->
                         if (androidDsl.productFlavors.findByName(flavor.name) == null) {
                             androidDsl.productFlavors.register(flavor.name) {
                                 dimension = dim.name
@@ -110,7 +106,7 @@ class AndroidProjectTarget(
             androidComponents.finalizeDsl {
                 val agpProductFlavors = androidDsl.productFlavors
                 val agpHasFlavors = agpProductFlavors.isNotEmpty()
-                val kameleonFlavors = extension.dimensions.flatMap { it.flavors }
+                val kameleonFlavors = extension.getOrderedDimensions().flatMap { it.getOrderedFlavors() }
 
                 if (agpHasFlavors) {
                     val agpFlavorNames = agpProductFlavors.map { it.name }.toSet()
@@ -141,11 +137,11 @@ class AndroidProjectTarget(
                         }
                     }
                 } else if (kameleonFlavors.isNotEmpty()) {
-                    extension.dimensions.forEach { dim ->
+                    extension.getOrderedDimensions().forEach { dim ->
                         if (!androidDsl.flavorDimensions.contains(dim.name)) {
                             androidDsl.flavorDimensions.add(dim.name)
                         }
-                        dim.flavors.forEach { flavor ->
+                        dim.getOrderedFlavors().forEach { flavor ->
                             if (androidDsl.productFlavors.findByName(flavor.name) == null) {
                                 androidDsl.productFlavors.register(flavor.name) {
                                     dimension = dim.name

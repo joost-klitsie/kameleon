@@ -7,6 +7,10 @@ import javax.swing.JComponent
 
 class KameleonVariantAction : ComboBoxAction() {
 
+    override fun getActionUpdateThread(): ActionUpdateThread {
+        return ActionUpdateThread.BGT
+    }
+
     override fun update(e: AnActionEvent) {
         val project = e.project
         if (project == null) {
@@ -41,9 +45,9 @@ class KameleonVariantAction : ComboBoxAction() {
             // Single dimension (or "default") -> flat list directly without submenu nesting
             val flavors = if (schema.dimensions.size == 1) {
                 val (dimName, flavorList) = schema.dimensions.entries.first()
-                flavorList.map { flavor -> dimName to flavor }
+                flavorList.sorted().map { flavor -> dimName to flavor }
             } else {
-                val list = if (state.availableFlavors.isNotEmpty()) state.availableFlavors else listOf("default")
+                val list = if (state.availableFlavors.isNotEmpty()) state.availableFlavors.sorted() else listOf("default")
                 list.map { "default" to it }
             }
 
@@ -56,7 +60,7 @@ class KameleonVariantAction : ComboBoxAction() {
                 val formattedDimName =
                     dimName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
                 val subGroup = DefaultActionGroup("Dimension: $formattedDimName", true)
-                for (flavor in flavors) {
+                for (flavor in flavors.sorted()) {
                     subGroup.add(FlavorToggleAction(dimName, flavor, state))
                 }
                 group.add(subGroup)
@@ -71,6 +75,10 @@ class KameleonVariantAction : ComboBoxAction() {
         private val flavor: String,
         private val state: KameleonStateService,
     ) : ToggleAction(flavor) {
+
+        override fun getActionUpdateThread(): ActionUpdateThread {
+            return ActionUpdateThread.BGT
+        }
 
         override fun isSelected(e: AnActionEvent): Boolean {
             val active = state.activeFlavors[dimension]

@@ -29,7 +29,7 @@ intellijPlatform {
     pluginConfiguration {
         id = "dev.klitsie.kameleon.switcher"
         name = "Kameleon Variant Switcher"
-        version = "0.1.0"
+        version = "0.1.1"
         vendor {
             name = "Joost Klitsie"
         }

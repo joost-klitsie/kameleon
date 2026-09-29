@@ -1,4 +1,6 @@
-rootProject.name = "kameleon-root"
+@file:Suppress("UnstableApiUsage")
+
+rootProject.name = "kameleon"
 
 pluginManagement {
     repositories {

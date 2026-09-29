@@ -62,19 +62,19 @@ class KameleonStateService(
         return mapOf("default" to currentFlavor.ifBlank { "default" })
     }
 
-    private val toolingModels = ConcurrentHashMap<String, KameleonToolingModel>()
+    private val toolingModels = java.util.Collections.synchronizedMap(LinkedHashMap<String, KameleonToolingModel>())
 
     override fun getState(): State {
-        myState.schemaDimensions = schema.dimensions.toMutableMap()
-        myState.schemaModuleDimensions = schema.moduleDimensions.toMutableMap()
+        myState.schemaDimensions = LinkedHashMap(schema.dimensions)
+        myState.schemaModuleDimensions = LinkedHashMap(schema.moduleDimensions)
         return myState
     }
 
     override fun loadState(state: State) {
         myState = state
         schema = ProjectFlavorSchema(
-            dimensions = state.schemaDimensions,
-            moduleDimensions = state.schemaModuleDimensions,
+            dimensions = LinkedHashMap(state.schemaDimensions),
+            moduleDimensions = LinkedHashMap(state.schemaModuleDimensions),
         )
     }
 
@@ -115,10 +115,11 @@ class KameleonStateService(
     }
 
     private fun rebuildSchema() {
-        val allDims = mutableMapOf<String, MutableList<String>>()
-        val modDims = mutableMapOf<String, Set<String>>()
+        val allDims = linkedMapOf<String, MutableList<String>>()
+        val modDims = linkedMapOf<String, Set<String>>()
 
-        for (model in toolingModels.values) {
+        val models = synchronized(toolingModels) { toolingModels.values.toList() }
+        for (model in models) {
             modDims[model.projectPath] = model.dimensions.keys
             for ((dim, flavors) in model.dimensions) {
                 val list = allDims.computeIfAbsent(dim) { mutableListOf() }
@@ -271,7 +272,7 @@ class KameleonStateService(
         NotificationGroupManager.getInstance()
             .getNotificationGroup("Kameleon Notifications")
             .createNotification(
-                title = "Variant Switch Not Possible",
+                title = "Variant switch not possible",
                 content = "A Gradle sync is currently in progress. Please wait for it to complete.",
                 type = NotificationType.WARNING,
             )

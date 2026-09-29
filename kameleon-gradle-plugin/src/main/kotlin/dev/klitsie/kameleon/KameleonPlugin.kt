@@ -14,6 +14,7 @@ import org.gradle.api.provider.Provider
 import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry
 import javax.inject.Inject
 
+@Suppress("unused")
 class KameleonPlugin @Inject constructor(
     private val registry: ToolingModelBuilderRegistry
 ) : Plugin<Project> {
@@ -161,8 +162,8 @@ internal fun resolveActiveVariant(project: Project, extension: KameleonExtension
 
     for (taskPath in requestedTasks) {
         val taskName = taskPath.substringAfterLast(':')
-        for (dim in extension.dimensions) {
-            for (flavor in dim.flavors) {
+        for (dim in extension.getOrderedDimensions()) {
+            for (flavor in dim.getOrderedFlavors()) {
                 val capFlavor = flavor.name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
                 if (taskName.contains(capFlavor, ignoreCase = false) ||
                     taskName.endsWith(flavor.name, ignoreCase = true) ||

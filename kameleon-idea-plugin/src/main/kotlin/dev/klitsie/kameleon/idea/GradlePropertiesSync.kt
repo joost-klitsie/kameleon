@@ -21,22 +21,14 @@ class GradlePropertiesSync(private val project: Project) {
         val targetKey = if (dimension.isBlank() || dimension.equals("default", ignoreCase = true)) "kameleon.flavor" else "kameleon.flavor.$dimension"
         val targetLine = "$targetKey=$flavor"
 
-        var propertiesFile = projectDir.findChild("gradle.properties")
+        val propertiesFile = projectDir.findChild("gradle.properties")
         if (propertiesFile == null || !propertiesFile.isValid) {
-            try {
-                WriteCommandAction.runWriteCommandAction(project) {
-                    propertiesFile = projectDir.createChildData(this, "gradle.properties")
-                }
-            } catch (t: Throwable) {
-                log.error("Failed to create gradle.properties", t)
-                return
-            }
+            log.info("gradle.properties does not exist. Skipping file write for property '$targetKey'.")
+            return
         }
-        val file = propertiesFile ?: return
-        if (!file.isValid) return
 
         try {
-            val content = VfsUtil.loadText(file)
+            val content = VfsUtil.loadText(propertiesFile)
             val lines = content.lines()
             val lineRegex = Regex("""^\s*${Regex.escape(targetKey)}\s*=\s*(.*?)\s*$""")
             val keyIndex = lines.indexOfFirst { lineRegex.matches(it) }
@@ -53,15 +45,9 @@ class GradlePropertiesSync(private val project: Project) {
                 val updatedLines = lines.toMutableList()
                 updatedLines[keyIndex] = targetLine
                 val newContent = updatedLines.joinToString(lineSeparator)
-                saveContent(file, newContent)
+                saveContent(propertiesFile, newContent)
             } else {
-                val lineSeparator = if (content.contains("\r\n")) "\r\n" else "\n"
-                val newContent = when {
-                    content.isEmpty() -> targetLine
-                    content.endsWith("\r\n") || content.endsWith("\n") -> "$content$targetLine"
-                    else -> "$content$lineSeparator$targetLine"
-                }
-                saveContent(file, newContent)
+                log.info("Property '$targetKey' is not defined in gradle.properties. Skipping file write.")
             }
         } catch (e: Throwable) {
             log.error("Failed to update gradle.properties for dimension '$dimension' with flavor '$flavor'", e)

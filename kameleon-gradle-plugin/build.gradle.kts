@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "dev.klitsie.kameleon"
-version = "0.1.0"
+version = "0.1.1"
 
 kotlin {
     jvmToolchain(17)
@@ -60,6 +60,7 @@ mavenPublishing {
 
 repositories {
     google {
+        @Suppress("UnstableApiUsage")
         mavenContent {
             includeGroupAndSubgroups("androidx")
             includeGroupAndSubgroups("com.android")

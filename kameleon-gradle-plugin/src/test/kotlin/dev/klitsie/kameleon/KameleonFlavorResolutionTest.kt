@@ -98,4 +98,20 @@ class KameleonFlavorResolutionTest {
         val activeVariant = resolveActiveVariant(project, extension)
         assertEquals("staging", activeVariant)
     }
+
+    @Test
+    fun `dimension registration preserves order of occurrence`() {
+        val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
+        project.pluginManager.apply("dev.klitsie.kameleon")
+
+        val extension = project.extensions.getByType(KameleonExtension::class.java)
+        extension.dimension("target", "phone", "tablet")
+        extension.dimension("environment", "staging", "production")
+
+        val orderedDims = extension.getOrderedDimensions().map { it.name }
+        assertEquals(listOf("target", "environment"), orderedDims)
+
+        val variants = VariantMatrix.calculateVariants(extension.getOrderedDimensions())
+        assertEquals(listOf("phoneStaging", "phoneProduction", "tabletStaging", "tabletProduction"), variants.map { it.name })
+    }
 }
