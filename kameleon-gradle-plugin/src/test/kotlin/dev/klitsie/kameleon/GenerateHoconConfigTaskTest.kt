@@ -47,18 +47,18 @@ class GenerateHoconConfigTaskTest {
         assertEquals("custom.conf", flavor.hoconConfig.fileName.get())
 
         val entries = flavor.hoconConfig.entries.get()
-        assertEquals(8, entries.size)
+        assertEquals(10, entries.size)
 
         assertEquals(HoconEntry("server.host", HoconValue.StringValue("127.0.0.1"), "SERVER_HOST"), entries[0])
         assertEquals(HoconEntry("server.domain", HoconValue.StringValue("example.com"), null), entries[1])
         assertEquals(HoconEntry("server.port", HoconValue.IntegerValue(8080), "SERVER_PORT"), entries[2])
-        assertEquals(HoconEntry("server.port2", HoconValue.IntegerValue(8081), "SERVER_PORT2"), entries[2])
         assertEquals(HoconEntry("server.timeout", HoconValue.IntegerValue(30), null), entries[3])
-        assertEquals(HoconEntry("server.timeout2", HoconValue.IntegerValue(40), null), entries[3])
-        assertEquals(HoconEntry("server.debug", HoconValue.BooleanValue(true), null), entries[4])
-        assertEquals(HoconEntry("server.ssl", HoconValue.BooleanValue(false), null), entries[5])
-        assertEquals(HoconEntry("server.allowedHosts", HoconValue.RawValue("[\"localhost\"]"), null), entries[6])
-        assertEquals(HoconEntry("server.cors", HoconValue.RawValue("[\"*\"]"), "CORS_ORIGIN"), entries[7])
+        assertEquals(HoconEntry("server.port2", HoconValue.IntegerValue(8081), "SERVER_PORT2"), entries[4])
+        assertEquals(HoconEntry("server.timeout2", HoconValue.IntegerValue(40), null), entries[5])
+        assertEquals(HoconEntry("server.debug", HoconValue.BooleanValue(true), null), entries[6])
+        assertEquals(HoconEntry("server.ssl", HoconValue.BooleanValue(false), null), entries[7])
+        assertEquals(HoconEntry("server.allowedHosts", HoconValue.RawValue("[\"localhost\"]"), null), entries[8])
+        assertEquals(HoconEntry("server.cors", HoconValue.RawValue("[\"*\"]"), "CORS_ORIGIN"), entries[9])
     }
 
     @Test
