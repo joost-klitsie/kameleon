@@ -2,6 +2,7 @@ package dev.klitsie.kameleon.dsl
 
 import org.gradle.api.Action
 import org.gradle.api.NamedDomainObjectContainer
+import org.gradle.api.file.Directory
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.Property
@@ -11,33 +12,21 @@ import javax.inject.Inject
 
 open class KameleonExtension @Inject constructor(
     objects: ObjectFactory,
-    private val providers: ProviderFactory
+    private val providers: ProviderFactory,
+    private val projectDirectory: Provider<Directory>,
+    private val rootProjectDirectory: Provider<Directory>,
 ) {
-    fun resolveFlavorForDimension(dim: String): Provider<String> {
-        return providers.gradleProperty("kameleon.flavor.$dim")
-            .orElse(providers.gradleProperty("kameleon.flavor"))
-    }
 
-    fun resolveDefaultFlavor(): Provider<String> {
-        return providers.gradleProperty("kameleon.flavor")
-    }
     val defaultVariant: Property<String> = objects.property(String::class.java).convention(
         providers.provider {
             val variants = dev.klitsie.kameleon.VariantMatrix.calculateVariants(getOrderedDimensions())
             variants.firstOrNull()?.name ?: "default"
-        }
+        },
     )
     val activeVariant: Property<String> = objects.property(String::class.java).convention(
         providers.gradleProperty("kameleon.flavor")
-            .orElse(defaultVariant)
+            .orElse(defaultVariant),
     )
-
-    // Backward compatibility aliases
-    val defaultFlavor: Property<String>
-        get() = defaultVariant
-
-    val activeFlavor: Property<String>
-        get() = activeVariant
 
     val defaultBuildConfig: DefaultBuildConfigBlock = objects.newInstance(DefaultBuildConfigBlock::class.java)
 
@@ -45,10 +34,25 @@ open class KameleonExtension @Inject constructor(
         action.execute(defaultBuildConfig)
     }
 
+    val defaultHoconConfig: HoconConfigBlock =
+        objects.newInstance(HoconConfigBlock::class.java, projectDirectory, rootProjectDirectory)
+
+    fun defaultHoconConfig(action: Action<HoconConfigBlock>) {
+        action.execute(defaultHoconConfig)
+    }
+
+    fun localProperty(key: String): Provider<String> =
+        createLocalPropertyProvider(providers, projectDirectory, rootProjectDirectory, key)
+
+    fun localProperty(key: String, defaultValue: String): Provider<String> =
+        localProperty(key).orElse(defaultValue)
+
     val baseResourceDir: DirectoryProperty = objects.directoryProperty()
 
     val dimensions: NamedDomainObjectContainer<KameleonDimension> =
-        objects.domainObjectContainer(KameleonDimension::class.java)
+        objects.domainObjectContainer(KameleonDimension::class.java) { name ->
+            objects.newInstance(KameleonDimension::class.java, name, projectDirectory, rootProjectDirectory)
+        }
 
     private val orderedDimensionNames = mutableListOf<String>()
 
@@ -98,6 +102,9 @@ open class KameleonExtension @Inject constructor(
     // Flat flavor backwards compatibility
     val flavors: NamedDomainObjectContainer<KameleonFlavor>
         get() = dimension("environment").flavors
+
+    fun flavor(name: String, action: Action<KameleonFlavor>? = null): KameleonFlavor =
+        dimension("environment").flavor(name, action)
 
     fun flavors(action: Action<NamedDomainObjectContainer<KameleonFlavor>>) {
         action.execute(flavors)

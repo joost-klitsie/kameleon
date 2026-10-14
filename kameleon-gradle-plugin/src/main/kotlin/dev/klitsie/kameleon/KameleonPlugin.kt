@@ -1,7 +1,9 @@
 package dev.klitsie.kameleon
 
 import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.dsl.LibraryExtension
 import dev.klitsie.kameleon.dsl.BuildConfigValue
+import dev.klitsie.kameleon.dsl.HoconEntry
 import dev.klitsie.kameleon.dsl.KameleonExtension
 import dev.klitsie.kameleon.targets.AndroidProjectTarget
 import dev.klitsie.kameleon.targets.ComposeResourcesTarget
@@ -19,7 +21,14 @@ class KameleonPlugin @Inject constructor(
     private val registry: ToolingModelBuilderRegistry
 ) : Plugin<Project> {
     override fun apply(project: Project) {
-        val extension = project.extensions.create("kameleon", KameleonExtension::class.java)
+        val projectDirectory = project.layout.projectDirectory
+        val rootProjectFile = project.rootProject.layout.projectDirectory
+        val extension = project.extensions.create(
+            "kameleon",
+            KameleonExtension::class.java,
+            project.provider { projectDirectory },
+            project.provider { rootProjectFile }
+        )
 
         registry.register(KameleonModelBuilder(extension))
 
@@ -38,7 +47,8 @@ class KameleonPlugin @Inject constructor(
         val defaultPackageProvider = project.provider {
             try {
                 val androidApp = project.extensions.findByType(ApplicationExtension::class.java)
-                val androidNamespace = androidApp?.namespace
+                val androidLib = project.extensions.findByType(LibraryExtension::class.java)
+                val androidNamespace = androidApp?.namespace ?: androidLib?.namespace
 
                 if (!androidNamespace.isNullOrBlank()) {
                     androidNamespace
@@ -97,6 +107,78 @@ internal fun resolveFieldsForVariant(
     }
 
     return resolved
+}
+
+internal fun resolveHoconEntriesForVariant(
+    extension: KameleonExtension,
+    variant: VariantCombination
+): List<HoconEntry> {
+    val resolved = LinkedHashMap<String, HoconEntry>()
+
+    // 1. Root defaultHoconConfig
+    for (entry in extension.defaultHoconConfig.entries.get()) {
+        resolved[entry.path] = entry
+    }
+
+    // 2. Dimension overrides
+    for (dim in extension.getOrderedDimensions()) {
+        for (entry in dim.hoconConfig.entries.get()) {
+            resolved[entry.path] = entry
+        }
+    }
+
+    // 3. Flavor overrides (in order of constituent flavors)
+    for (flavorName in variant.flavorNames) {
+        for (dim in extension.getOrderedDimensions()) {
+            val flavor = dim.flavors.findByName(flavorName)
+            if (flavor != null) {
+                for (entry in flavor.hoconConfig.entries.get()) {
+                    resolved[entry.path] = entry
+                }
+            }
+        }
+    }
+
+    // 4. Variant-level combination flavor override (if a flavor matches full variant name)
+    for (dim in extension.getOrderedDimensions()) {
+        val variantFlavor = dim.flavors.findByName(variant.name)
+        if (variantFlavor != null) {
+            for (entry in variantFlavor.hoconConfig.entries.get()) {
+                resolved[entry.path] = entry
+            }
+        }
+    }
+
+    return resolved.values.toList()
+}
+
+internal fun resolveHoconFileNameForVariant(
+    extension: KameleonExtension,
+    variant: VariantCombination
+): String {
+    for (dim in extension.getOrderedDimensions()) {
+        val variantFlavor = dim.flavors.findByName(variant.name)
+        if (variantFlavor != null && variantFlavor.hoconConfig.fileName.isPresent) {
+            return variantFlavor.hoconConfig.fileName.get()
+        }
+    }
+
+    for (flavorName in variant.flavorNames.reversed()) {
+        for (dim in extension.getOrderedDimensions()) {
+            val flavor = dim.flavors.findByName(flavorName)
+            if (flavor != null && flavor.hoconConfig.fileName.isPresent) {
+                return flavor.hoconConfig.fileName.get()
+            }
+        }
+    }
+
+    for (dim in extension.getOrderedDimensions().reversed()) {
+        if (dim.hoconConfig.fileName.isPresent) {
+            return dim.hoconConfig.fileName.get()
+        }
+    }
+
+    return extension.defaultHoconConfig.fileName.getOrElse("kameleon.conf")
 }
 
 internal fun resolveActiveVariant(project: Project, extension: KameleonExtension): String {

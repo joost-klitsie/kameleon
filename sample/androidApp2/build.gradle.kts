@@ -18,7 +18,6 @@ android {
     }
 
     flavorDimensions += "brand"
-//    flavorDimensions += "environment"
     productFlavors {
         create("whoop") {
             dimension = "brand"
@@ -26,13 +25,6 @@ android {
         create("flappy") {
             dimension = "brand"
         }
-//        create("staging") {
-//            dimension = "environment"
-//            applicationIdSuffix = ".staging"
-//        }
-//        create("production") {
-//            dimension = "environment"
-//        }
     }
 
     compileOptions {

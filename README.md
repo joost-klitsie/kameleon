@@ -17,6 +17,8 @@ It brings Android-style product flavors and multi-dimensional flavor matrices ac
 - **Unified Source Set Overlays**: Automatically overlay Kotlin source sets per flavor and per composite variant across `commonMain` and platform targets.
 - **Compose Multiplatform Resources Merging**: Seamlessly merge and override Compose Multiplatform resources (`composeResources`) based on the active flavor/variant hierarchy.
 - **Type-Safe BuildConfig (`KameleonConfig`)**: Generate compile-time constants (`String`, `Boolean`, `Int`, `Long`) with hierarchical value overrides (Project Default &rarr; Dimension &rarr; Flavor).
+- **HOCON Configuration (`hoconConfig`)**: Generate runtime HOCON files (`kameleon.conf` / `application.conf`) on the classpath for Ktor and backend JVM applications with automatic environment variable overrides.
+- **`local.properties` Integration**: Type-safe, configuration-cache-safe `localProperty` helper to securely inject developer machine settings and secrets into build configs and HOCON.
 - **IntelliJ & Android Studio Companion Plugin**: Fast variant switching toolbar with automatic two-way synchronization to `gradle.properties` and Android Gradle Plugin (AGP) build variants.
 - **Task & Xcode Aware**: Automatically detects flavors from Gradle task names (e.g., `assembleWhoopProductionDebug`) and Xcode build environment variables (`FLAVOR`, `SCHEME`, `CONFIGURATION`).
 
@@ -105,29 +107,44 @@ When multiple dimensions are configured, Kameleon calculates the Cartesian produ
 
 Kameleon generates a type-safe `KameleonConfig` class available in `commonMain` (and platform targets). Fields can be declared globally, per dimension, or per flavor, with lower levels overriding higher levels.
 
+### BuildConfig DSL Methods
+
+Inside `defaultBuildConfig` or flavor `buildConfig`, you can define fields using typed methods, generic `put`, or Kotlin idiomatic operators:
+
+- **Typed methods**: `putString(key, value)`, `putBoolean(key, value)`, `putInt(key, value)`, `putLong(key, value)`
+- **Generic method**: `put(key, value)` (accepts `String`, `Boolean`, `Int`, `Long`)
+- **Infix operator**: `"KEY" to value`
+- **Indexed assignment**: `this["KEY"] = value`
+
 ```kotlin
 kameleon {
     // 1. Root / Base defaults
     defaultBuildConfig {
         packageName.set("dev.klitsie.kameleon.sample")
         className.set("KameleonConfig") // default: KameleonConfig
-        fields.put("APP_NAME", "Kameleon App")
-        fields.put("ENABLE_ANALYTICS", false)
-        fields.put("TIMEOUT_SECONDS", 30)
+
+        // Typed helper methods
+        putString("APP_NAME", "Kameleon App")
+        putBoolean("ENABLE_ANALYTICS", false)
+        putInt("TIMEOUT_SECONDS", 30)
+
+        // Or idiomatic infix / operator syntax
+        "DEFAULT_THEME" to "dark"
+        this["CACHE_SIZE_MB"] = 128
     }
 
     // 2. Dimension & Flavor-specific overrides
     dimension("environment") {
         flavor("staging") {
             buildConfig {
-                fields.put("API_URL", "https://staging.api.example.com")
-                fields.put("ENABLE_ANALYTICS", true)
+                putString("API_URL", "https://staging.api.example.com")
+                putBoolean("ENABLE_ANALYTICS", true)
             }
         }
         flavor("production") {
             buildConfig {
-                fields.put("API_URL", "https://api.example.com")
-                fields.put("ENABLE_ANALYTICS", true)
+                putString("API_URL", "https://api.example.com")
+                putBoolean("ENABLE_ANALYTICS", true)
             }
         }
     }
@@ -148,7 +165,128 @@ fun initializeApp() {
 
 ---
 
-## 4. Project Directory Structure & Merging Rules
+## 4. HOCON Configuration (`hoconConfig`) & Local Properties
+
+For backend JVM, server-side Kotlin, and Ktor applications, Kameleon can generate HOCON configuration files (such as `kameleon.conf` or `application.conf`) directly onto the runtime classpath (`build/resources/main/`).
+
+HOCON settings can be defined globally (`defaultHoconConfig`), at the dimension level, or per flavor (`hoconConfig`).
+
+### HOCON DSL Methods
+
+- `fileName.set("kameleon.conf")`: Sets the output filename on the classpath root (default is `kameleon.conf`).
+- `putString(path, value, environmentOverride)`: Puts a string value.
+- `putInteger(path, value, environmentOverride)` / `putInt(...)`: Puts an integer value.
+- `putBoolean(path, value, environmentOverride)`: Puts a boolean value.
+- `putRaw(path, rawValue, environmentOverride)`: Puts raw HOCON content (e.g. array `"[ \"moduleA\", \"moduleB\" ]"`).
+- `environmentOverride`: Optional environment variable name. When provided, Kameleon automatically outputs HOCON substitution fallback syntax (`path = ${?ENV_VAR}`).
+
+### `localProperty` Helper
+
+Use `localProperty(key)` or `localProperty(key, defaultValue)` to read properties from `local.properties` (e.g. developer-specific secrets, hosts, or tokens) in a Gradle Configuration Cache-safe manner:
+
+```kotlin
+putString("db.host", localProperty("dev.db.host", "localhost"))
+```
+
+### Gradle Build Configuration Example
+
+```kotlin
+kameleon {
+    dimension("environment") {
+        flavors {
+            register("staging") {
+                hoconConfig {
+                    fileName.set("kameleon.conf")
+
+                    // Reads from local.properties with fallback
+                    putString("server.host", localProperty("server.host", "localhost"), environmentOverride = "SERVER_HOST")
+                    putInteger("server.port", 8080, environmentOverride = "PORT")
+                    putBoolean("app.debugMode", true)
+                    putString("app.greeting", "world (staging)", environmentOverride = "APP_GREETING")
+                    putRaw("app.allowedHosts", "[\"localhost\", \"127.0.0.1\"]")
+                }
+            }
+            register("production") {
+                hoconConfig {
+                    fileName.set("kameleon.conf")
+
+                    putString("server.host", "api.example.com", environmentOverride = "SERVER_HOST")
+                    putInteger("server.port", 80, environmentOverride = "PORT")
+                    putBoolean("app.debugMode", false)
+                    putString("app.greeting", "world", environmentOverride = "APP_GREETING")
+                    putRaw("app.allowedHosts", "[\"api.example.com\"]")
+                }
+            }
+        }
+    }
+}
+```
+
+### Including `kameleon.conf` in Ktor (`application.conf`)
+
+In your application's `src/main/resources/application.conf`, include the generated classpath config:
+
+```hocon
+include classpath("kameleon.conf")
+
+ktor {
+    deployment {
+        port = 8080
+        port = ${?PORT}
+    }
+    application {
+        modules = [ dev.klitsie.kameleon.sample.server.ApplicationKt.module ]
+    }
+}
+```
+
+### Reading Config in Application Code
+
+```kotlin
+package dev.klitsie.kameleon.sample.server
+
+import io.ktor.server.application.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+
+fun main(args: Array<String>): Unit = io.ktor.server.netty.EngineMain.main(args)
+
+fun Application.module() {
+    val greeting = environment.config.propertyOrNull("app.greeting")?.getString() ?: "world"
+
+    routing {
+        get("/hello") {
+            call.respondText(greeting)
+        }
+    }
+}
+```
+
+### Generated HOCON Output
+
+For the `staging` flavor, Kameleon generates `build/resources/main/kameleon.conf`:
+
+```hocon
+server {
+  host = "localhost"
+  host = ${?SERVER_HOST}
+  port = 8080
+  port = ${?PORT}
+}
+app {
+  debugMode = true
+  greeting = "world (staging)"
+  greeting = ${?APP_GREETING}
+  allowedHosts = [
+    "localhost",
+    "127.0.0.1"
+  ]
+}
+```
+
+---
+
+## 5. Project Directory Structure & Merging Rules
 
 Kameleon looks for flavor-specific source code and Compose resources under `src/flavors/<flavor-name>/`.
 
@@ -189,7 +327,7 @@ When building a variant such as `whoopProduction`, Kameleon applies overlays in 
 
 ---
 
-## 5. Selecting and Building Variants
+## 6. Selecting and Building Variants
 
 ### Via `gradle.properties` (Persistent)
 
@@ -231,7 +369,7 @@ When building through Xcode via `embedAndSignAppleFrameworkForXcode`, Kameleon a
 
 ---
 
-## 6. Companion IntelliJ & Android Studio Plugin
+## 7. Companion IntelliJ & Android Studio Plugin
 
 The `kameleon-idea-plugin` (**Kameleon Variant Switcher**) provides seamless variant switching inside your IDE.
 
@@ -246,10 +384,11 @@ The `kameleon-idea-plugin` (**Kameleon Variant Switcher**) provides seamless var
 
 ---
 
-## 7. Sample Project
+## 8. Sample Project
 
 Inspect the `sample/` directory in this repository for a complete reference implementation:
 - `:sample:shared-translations`: Demonstrates flavor-based Compose string and resource overrides.
 - `:sample:shared-app`: Multiplatform shared logic consuming `KameleonConfig`.
 - `:sample:androidApp`: Android application utilizing AGP flavor dimensions paired with Kameleon.
 - `:sample:desktopApp`, `:sample:webApp`: Multiplatform targets consuming flavored resources and configs.
+- `:sample:serverApp`: Ktor server application demonstrating flavor-based HOCON configuration and endpoint responses.

@@ -5,9 +5,13 @@ import dev.klitsie.kameleon.VariantMatrix
 import dev.klitsie.kameleon.dsl.KameleonExtension
 import dev.klitsie.kameleon.resolveActiveVariant
 import dev.klitsie.kameleon.resolveFieldsForVariant
+import dev.klitsie.kameleon.resolveHoconEntriesForVariant
+import dev.klitsie.kameleon.resolveHoconFileNameForVariant
+import dev.klitsie.kameleon.tasks.GenerateHoconConfigTask
 import dev.klitsie.kameleon.tasks.GenerateKameleonConfigTask
 import dev.klitsie.kameleon.tasks.MergeComposeResourcesTask
 import org.gradle.api.Project
+import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.kotlin.dsl.register
@@ -21,13 +25,6 @@ class KotlinMultiplatformTarget(
     private val extension: KameleonExtension,
     private val mergeTaskProvider: TaskProvider<MergeComposeResourcesTask>? = null
 ) : TargetAdapter {
-    constructor(project: Project) : this(
-        project,
-        project.extensions.getByType(KameleonExtension::class.java),
-        if (project.tasks.names.contains("mergeKameleonResources")) {
-            project.tasks.named("mergeKameleonResources", MergeComposeResourcesTask::class.java)
-        } else null
-    )
 
     override fun configure() {
         configureSourceSets()
@@ -89,12 +86,15 @@ class KotlinMultiplatformTarget(
 
     private fun configureVariantTasks() {
         project.afterEvaluate {
-            val kotlinExt = project.extensions.findByType(KotlinMultiplatformExtension::class.java)
             val hasKmp = project.plugins.hasPlugin("org.jetbrains.kotlin.multiplatform")
             val hasKotlinJvm = project.plugins.hasPlugin("org.jetbrains.kotlin.jvm")
-            if (kotlinExt == null && !hasKmp && !hasKotlinJvm) {
+            if (!hasKmp && !hasKotlinJvm) {
                 return@afterEvaluate
             }
+
+            val kotlinExt = if (hasKmp) {
+                project.extensions.findByType(KotlinMultiplatformExtension::class.java)
+            } else null
 
             val hasJvmOrDesktop = kotlinExt?.targets?.any { it.platformType.name == "jvm" } == true ||
                 hasKotlinJvm
@@ -125,6 +125,20 @@ class KotlinMultiplatformTarget(
                         fields.set(project.provider { resolveFieldsForVariant(extension, variant) })
                         outputDir.convention(
                             project.layout.buildDirectory.dir("generated/kameleon/buildconfig/${variant.name}")
+                        )
+                    }
+                }
+
+                // HOCON Config Task for this variant
+                val hoconTaskName = "generateKameleon${capVariant}HoconConfig"
+                if (project.tasks.findByName(hoconTaskName) == null) {
+                    project.tasks.register(hoconTaskName, GenerateHoconConfigTask::class.java) {
+                        group = "kameleon"
+                        description = "Generates HOCON config for the '${variant.name}' variant."
+                        fileName.set(project.provider { resolveHoconFileNameForVariant(extension, variant) })
+                        entries.set(project.provider { resolveHoconEntriesForVariant(extension, variant) })
+                        outputDirectory.convention(
+                            project.layout.buildDirectory.dir("generated/kameleon/hocon/${variant.name}")
                         )
                     }
                 }
@@ -367,9 +381,41 @@ class KotlinMultiplatformTarget(
                 }
             }
 
+            val activeHoconTaskName = "generateKameleon${activeCapVariant}HoconConfig"
+            val activeHoconGenTask = if (project.tasks.findByName(activeHoconTaskName) != null) {
+                project.tasks.named(activeHoconTaskName, GenerateHoconConfigTask::class.java)
+            } else {
+                project.tasks.register(activeHoconTaskName, GenerateHoconConfigTask::class.java) {
+                    group = "kameleon"
+                    description = "Generates HOCON config for the '$activeVariant' variant."
+                    val combination = variants.find { it.name.equals(activeVariant, ignoreCase = true) }
+                        ?: VariantCombination(activeVariant, emptyList())
+                    fileName.set(project.provider { resolveHoconFileNameForVariant(extension, combination) })
+                    entries.set(project.provider { resolveHoconEntriesForVariant(extension, combination) })
+                    outputDirectory.convention(
+                        project.layout.buildDirectory.dir("generated/kameleon/hocon/$activeVariant")
+                    )
+                }
+            }
+
+            if (project.tasks.findByName("generateKameleonHoconConfig") == null) {
+                project.tasks.register("generateKameleonHoconConfig") {
+                    group = "kameleon"
+                    description = "Generates HOCON config for the active variant ('$activeVariant')."
+                    dependsOn(activeHoconGenTask)
+                }
+            }
+
             // Wire into Kotlin Multiplatform source sets
             if (kotlinExt != null) {
                 kotlinExt.sourceSets.findByName("commonMain")?.kotlin?.srcDir(activeGenTask.map { it.outputDir })
+                kotlinExt.sourceSets.findByName("commonMain")?.resources?.srcDir(activeHoconGenTask.map { it.outputDirectory })
+                kotlinExt.sourceSets.findByName("jvmMain")?.resources?.srcDir(activeHoconGenTask.map { it.outputDirectory })
+            } else if (hasKotlinJvm) {
+                project.extensions.findByType(JavaPluginExtension::class.java)?.sourceSets?.findByName("main")?.let { mainSet ->
+                    mainSet.java.srcDir(activeGenTask.map { it.outputDir })
+                    mainSet.resources.srcDir(activeHoconGenTask.map { it.outputDirectory })
+                }
             }
 
             if (hasIos) {

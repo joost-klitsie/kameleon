@@ -7,8 +7,15 @@ import com.android.build.api.variant.ApplicationAndroidComponentsExtension
 import com.android.build.api.variant.LibraryAndroidComponentsExtension
 import com.android.build.api.variant.Variant
 import dev.klitsie.kameleon.FlavorAttribute
+import dev.klitsie.kameleon.VariantCombination
+import dev.klitsie.kameleon.VariantMatrix
 import dev.klitsie.kameleon.dsl.KameleonExtension
+import dev.klitsie.kameleon.resolveFieldsForVariant
+import dev.klitsie.kameleon.resolveHoconEntriesForVariant
+import dev.klitsie.kameleon.resolveHoconFileNameForVariant
 import dev.klitsie.kameleon.resolveOverlayDirsForVariantName
+import dev.klitsie.kameleon.tasks.GenerateHoconConfigTask
+import dev.klitsie.kameleon.tasks.GenerateKameleonConfigTask
 import dev.klitsie.kameleon.tasks.MergeComposeResourcesTask
 import org.gradle.api.GradleException
 import org.gradle.api.Project
@@ -185,6 +192,49 @@ class AndroidProjectTarget(
                 variantMergeTask,
                 MergeComposeResourcesTask::outputDir
             )
+
+            val hoconTaskName = "generateKameleon${capVariant}HoconConfig"
+            val variantHoconTask = if (project.tasks.findByName(hoconTaskName) != null) {
+                project.tasks.named(hoconTaskName, GenerateHoconConfigTask::class.java)
+            } else {
+                project.tasks.register(hoconTaskName, GenerateHoconConfigTask::class.java) {
+                    val variants = VariantMatrix.calculateVariants(extension.getOrderedDimensions())
+                    val comb = variants.find { it.name.equals(variantName, ignoreCase = true) }
+                        ?: VariantCombination(variantName, listOf(variantName))
+                    fileName.set(project.provider { resolveHoconFileNameForVariant(extension, comb) })
+                    entries.set(project.provider { resolveHoconEntriesForVariant(extension, comb) })
+                    outputDirectory.convention(project.layout.buildDirectory.dir("generated/kameleon/hocon/$variantName"))
+                }
+            }
+            variant.sources.resources?.addGeneratedSourceDirectory(
+                variantHoconTask,
+                GenerateHoconConfigTask::outputDirectory
+            )
+
+            val configTaskName = "generateKameleon${capVariant}Config"
+            val variantConfigTask = if (project.tasks.findByName(configTaskName) != null) {
+                project.tasks.named(configTaskName, GenerateKameleonConfigTask::class.java)
+            } else {
+                project.tasks.register(configTaskName, GenerateKameleonConfigTask::class.java) {
+                    group = "kameleon"
+                    description = "Generates type-safe KameleonConfig for the '$variantName' variant."
+                    packageName.set(extension.defaultBuildConfig.packageName)
+                    className.set(extension.defaultBuildConfig.className)
+                    this.variantName.set(variantName)
+                    val variants = VariantMatrix.calculateVariants(extension.getOrderedDimensions())
+                    val comb = variants.find { it.name.equals(variantName, ignoreCase = true) }
+                        ?: VariantCombination(variantName, listOf(variantName))
+                    flavorParts.set(comb.flavorNames)
+                    fields.set(project.provider { resolveFieldsForVariant(extension, comb) })
+                    outputDir.convention(
+                        project.layout.buildDirectory.dir("generated/kameleon/buildconfig/$variantName")
+                    )
+                }
+            }
+            variant.sources.java?.addGeneratedSourceDirectory(
+                variantConfigTask,
+                GenerateKameleonConfigTask::outputDir
+            )
         }
     }
 
@@ -193,14 +243,8 @@ class AndroidProjectTarget(
         androidComponents.onVariants { variant ->
             val flavor = variant.flavorName ?: return@onVariants
 
-            listOf(
-                "${variant.name}CompileClasspath",
-                "${variant.name}RuntimeClasspath"
-            ).forEach { configName ->
-                project.configurations.matching { it.name == configName }.configureEach {
-                    attributes.attribute(FlavorAttribute.FLAVOR_ATTRIBUTE, flavor)
-                }
-            }
+            variant.compileConfiguration.attributes.attribute(FlavorAttribute.FLAVOR_ATTRIBUTE, flavor)
+            variant.runtimeConfiguration.attributes.attribute(FlavorAttribute.FLAVOR_ATTRIBUTE, flavor)
         }
     }
 }

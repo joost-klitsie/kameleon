@@ -26,6 +26,7 @@ kameleon {
         "baseUrl" to "https://api.example.com"
         "enableAnalytics" to true
         this["timeoutSeconds"] = 30
+
     }
 
     dimension("brand") {

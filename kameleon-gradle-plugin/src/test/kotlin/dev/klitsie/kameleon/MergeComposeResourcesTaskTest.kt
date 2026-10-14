@@ -33,7 +33,8 @@ class MergeComposeResourcesTaskTest {
     @Test
     fun `variant matrix computes Cartesian product and names correctly`() {
         val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
-        val extension = project.extensions.create("kameleon", KameleonExtension::class.java)
+        project.plugins.apply(KameleonPlugin::class.java)
+        val extension = project.extensions.getByType(KameleonExtension::class.java)
 
         val brandDim = extension.dimensions.maybeCreate("brand")
         brandDim.flavors("demo", "full")
@@ -57,7 +58,8 @@ class MergeComposeResourcesTaskTest {
     @Test
     fun `dsl supports dimension block and register helpers`() {
         val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
-        val extension = project.extensions.create("kameleon", KameleonExtension::class.java)
+        project.plugins.apply(KameleonPlugin::class.java)
+        val extension = project.extensions.getByType(KameleonExtension::class.java)
 
         extension.dimension("brand") {
             register("demo", "full")
@@ -223,7 +225,8 @@ class MergeComposeResourcesTaskTest {
     @Test
     fun `flat flavors automatically group under environment dimension`() {
         val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
-        val extension = project.extensions.create("kameleon", KameleonExtension::class.java)
+        project.plugins.apply(KameleonPlugin::class.java)
+        val extension = project.extensions.getByType(KameleonExtension::class.java)
 
         extension.flavors("staging", "production")
 

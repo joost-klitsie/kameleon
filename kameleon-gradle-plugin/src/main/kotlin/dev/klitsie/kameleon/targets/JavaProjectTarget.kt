@@ -5,6 +5,9 @@ import dev.klitsie.kameleon.VariantMatrix
 import dev.klitsie.kameleon.dsl.KameleonExtension
 import dev.klitsie.kameleon.resolveActiveVariant
 import dev.klitsie.kameleon.resolveFieldsForVariant
+import dev.klitsie.kameleon.resolveHoconEntriesForVariant
+import dev.klitsie.kameleon.resolveHoconFileNameForVariant
+import dev.klitsie.kameleon.tasks.GenerateHoconConfigTask
 import dev.klitsie.kameleon.tasks.GenerateKameleonConfigTask
 import org.gradle.api.Project
 import org.gradle.api.plugins.JavaPluginExtension
@@ -14,10 +17,6 @@ class JavaProjectTarget(
     private val project: Project,
     private val extension: KameleonExtension
 ) : TargetAdapter {
-    constructor(project: Project) : this(
-        project,
-        project.extensions.getByType(KameleonExtension::class.java)
-    )
 
     override fun configure() {
         project.plugins.withId("java") {
@@ -94,6 +93,19 @@ class JavaProjectTarget(
                     )
                 }
             }
+
+            val hoconTaskName = "generateKameleon${capVariant}HoconConfig"
+            if (project.tasks.findByName(hoconTaskName) == null) {
+                project.tasks.register(hoconTaskName, GenerateHoconConfigTask::class.java) {
+                    group = "kameleon"
+                    description = "Generates HOCON config for the '${variant.name}' variant."
+                    fileName.set(project.provider { resolveHoconFileNameForVariant(extension, variant) })
+                    entries.set(project.provider { resolveHoconEntriesForVariant(extension, variant) })
+                    outputDirectory.convention(
+                        project.layout.buildDirectory.dir("generated/kameleon/hocon/${variant.name}")
+                    )
+                }
+            }
         }
 
         // Active variant task
@@ -123,6 +135,23 @@ class JavaProjectTarget(
             }
         }
 
+        val activeHoconTaskName = "generateKameleon${activeCapVariant}HoconConfig"
+        val activeHoconGenTask = if (project.tasks.findByName(activeHoconTaskName) != null) {
+            project.tasks.named(activeHoconTaskName, GenerateHoconConfigTask::class.java)
+        } else {
+            project.tasks.register(activeHoconTaskName, GenerateHoconConfigTask::class.java) {
+                group = "kameleon"
+                description = "Generates HOCON config for the '$activeVariant' variant."
+                val comb = variants.find { it.name.equals(activeVariant, ignoreCase = true) }
+                    ?: VariantCombination(activeVariant, emptyList())
+                fileName.set(project.provider { resolveHoconFileNameForVariant(extension, comb) })
+                entries.set(project.provider { resolveHoconEntriesForVariant(extension, comb) })
+                outputDirectory.convention(
+                    project.layout.buildDirectory.dir("generated/kameleon/hocon/$activeVariant")
+                )
+            }
+        }
+
         if (project.tasks.findByName("generateJavaBuildConfig") == null) {
             project.tasks.register("generateJavaBuildConfig") {
                 group = "kameleon"
@@ -139,6 +168,15 @@ class JavaProjectTarget(
             }
         }
 
+        if (project.tasks.findByName("generateKameleonHoconConfig") == null) {
+            project.tasks.register("generateKameleonHoconConfig") {
+                group = "kameleon"
+                description = "Generates HOCON config for the active variant ('$activeVariant')."
+                dependsOn(activeHoconGenTask)
+            }
+        }
+
         mainSourceSet.java.srcDir(activeGenTask.map { it.outputDir })
+        mainSourceSet.resources.srcDir(activeHoconGenTask.map { it.outputDirectory })
     }
 }

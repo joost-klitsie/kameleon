@@ -19,7 +19,8 @@ class GenerateKameleonConfigTaskTest {
     @Test
     fun `build config block supports multiple assignment syntaxes and types`() {
         val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
-        val extension = project.extensions.create("kameleon", KameleonExtension::class.java)
+        project.plugins.apply(KameleonPlugin::class.java)
+        val extension = project.extensions.getByType(KameleonExtension::class.java)
 
         extension.defaultBuildConfig {
             packageName.set("com.example.app")
@@ -64,7 +65,8 @@ class GenerateKameleonConfigTaskTest {
     @Test
     fun `build config block throws IllegalArgumentException on unsupported types`() {
         val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
-        val extension = project.extensions.create("kameleon", KameleonExtension::class.java)
+        project.plugins.apply(KameleonPlugin::class.java)
+        val extension = project.extensions.getByType(KameleonExtension::class.java)
 
         assertThrows<IllegalArgumentException> {
             extension.defaultBuildConfig {
@@ -218,5 +220,118 @@ class GenerateKameleonConfigTaskTest {
         // Explicit override still wins over AGP namespace
         extension.defaultBuildConfig.packageName.set("com.custom.override")
         assertEquals("com.custom.override", extension.defaultBuildConfig.packageName.get())
+    }
+
+    @Test
+    fun `default package name automatically resolves from AGP LibraryExtension namespace lazily`() {
+        val projDir = File(tempDir, "proj-android-lib-pkg").apply { mkdirs() }
+        val project = ProjectBuilder.builder().withProjectDir(projDir).build()
+
+        project.pluginManager.apply("com.android.library")
+        project.pluginManager.apply("dev.klitsie.kameleon")
+
+        val androidLib = project.extensions.getByType(com.android.build.api.dsl.LibraryExtension::class.java)
+        androidLib.namespace = "com.example.agplib"
+
+        val extension = project.extensions.findByType(KameleonExtension::class.java)!!
+
+        assertEquals("com.example.agplib", extension.defaultBuildConfig.packageName.get())
+    }
+
+    @Test
+    fun `android application generates build config tasks for variants`() {
+        val projDir = File(tempDir, "proj-android-app-gen").apply { mkdirs() }
+        val project = ProjectBuilder.builder().withProjectDir(projDir).build()
+
+        project.pluginManager.apply("com.android.application")
+        project.pluginManager.apply("dev.klitsie.kameleon")
+
+        val androidApp = project.extensions.getByType(com.android.build.api.dsl.ApplicationExtension::class.java)
+        androidApp.namespace = "com.example.androidapp"
+        androidApp.compileSdk = 34
+
+        val extension = project.extensions.findByType(KameleonExtension::class.java)!!
+        extension.defaultBuildConfig {
+            "apiEndpoint" to "https://api.example.com"
+        }
+        extension.dimension("flavor") {
+            flavor("free") {
+                buildConfig {
+                    "isPaid" to false
+                }
+            }
+            flavor("paid") {
+                buildConfig {
+                    "isPaid" to true
+                }
+            }
+        }
+
+        val evaluateMethod = project.javaClass.getMethod("evaluate")
+        evaluateMethod.invoke(project)
+
+        val freeTask = project.tasks.findByName("generateKameleonFreeConfig") as? GenerateKameleonConfigTask
+        val paidTask = project.tasks.findByName("generateKameleonPaidConfig") as? GenerateKameleonConfigTask
+
+        assertTrue(freeTask != null, "generateKameleonFreeConfig task should be registered")
+        assertTrue(paidTask != null, "generateKameleonPaidConfig task should be registered")
+
+        freeTask.generate()
+
+        val outputDir = freeTask.outputDir.get().asFile
+        val generatedFile = File(outputDir, "com/example/androidapp/KameleonConfig.kt")
+        assertTrue(generatedFile.exists(), "KameleonConfig.kt should be generated")
+
+        val content = generatedFile.readText()
+        assertTrue(content.contains("package com.example.androidapp"))
+        assertTrue(content.contains("public object KameleonConfig {"))
+        assertTrue(content.contains("public const val VARIANT: String = \"free\""))
+        assertTrue(content.contains("public const val FLAVOR: String = \"free\""))
+        assertTrue(content.contains("public const val API_ENDPOINT: String = \"https://api.example.com\""))
+        assertTrue(content.contains("public const val IS_PAID: Boolean = false"))
+    }
+
+    @Test
+    fun `android library generates build config tasks for variants`() {
+        val projDir = File(tempDir, "proj-android-lib-gen").apply { mkdirs() }
+        val project = ProjectBuilder.builder().withProjectDir(projDir).build()
+
+        project.pluginManager.apply("com.android.library")
+        project.pluginManager.apply("dev.klitsie.kameleon")
+
+        val androidLib = project.extensions.getByType(com.android.build.api.dsl.LibraryExtension::class.java)
+        androidLib.namespace = "com.example.androidlib"
+        androidLib.compileSdk = 34
+
+        val extension = project.extensions.findByType(KameleonExtension::class.java)!!
+        extension.defaultBuildConfig {
+            "libraryKey" to "secret-key"
+        }
+        extension.dimension("env") {
+            flavor("staging")
+            flavor("production")
+        }
+
+        val evaluateMethod = project.javaClass.getMethod("evaluate")
+        evaluateMethod.invoke(project)
+
+        val stagingTask = project.tasks.findByName("generateKameleonStagingConfig") as? GenerateKameleonConfigTask
+        val prodTask = project.tasks.findByName("generateKameleonProductionConfig") as? GenerateKameleonConfigTask
+
+        assertTrue(stagingTask != null, "generateKameleonStagingConfig task should be registered")
+        assertTrue(prodTask != null, "generateKameleonProductionConfig task should be registered")
+
+        stagingTask.generate()
+
+        val outputDir = stagingTask.outputDir.get().asFile
+        val generatedFile = File(outputDir, "com/example/androidlib/KameleonConfig.kt")
+        assertTrue(generatedFile.exists(), "KameleonConfig.kt should be generated")
+
+        val content = generatedFile.readText()
+        assertTrue(content.contains("package com.example.androidlib"))
+        assertTrue(content.contains("public object KameleonConfig {"))
+        assertTrue(content.contains("public const val VARIANT: String = \"staging\""))
+        assertTrue(content.contains("public const val FLAVOR: String = \"staging\""))
+        assertTrue(content.contains("public const val LIBRARY_KEY: String = \"secret-key\""))
     }
 }

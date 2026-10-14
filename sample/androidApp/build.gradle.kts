@@ -41,6 +41,12 @@ android {
     }
 }
 
+kameleon {
+    defaultBuildConfig {
+        "test" to "value"
+    }
+}
+
 dependencies {
     implementation(project(":sample:shared-app"))
     implementation(libs.androidx.activity.compose)
